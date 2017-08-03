@@ -208,6 +208,62 @@ def add_article():
 
     return render_template('add_article.html', form=form)
 
+
+#   EDIT ARTICLE
+@app.route('/edit_article/<string:id>', methods=['GET', 'POST'])
+@is_logged_in
+def edit_article(id):
+    #   CREATE CURSOR
+    cur = mysql.connection.cursor()
+
+    #   GET THE USER BY ID
+    result = cur.execute("SELECT * FROM articles WHERE id = %s", [id])
+
+    article = cur.fetchone()
+
+    # GET FORM
+    form = ArticleForm(request.form)
+
+    # POPULATE ARTICLE FORMS
+    form.title.data = article['title']
+    form.body.data = article['body']
+
+    if request.method == 'POST' and form.validate():
+        title = request.form['title']
+        body = request.form['body']
+
+        #   CREATE CURSOR
+        cur = mysql.connection.cursor()
+        #   EXECUTE
+        cur.execute("UPDATE articles SET title = %s, body = %s WHERE id = %s", (title, body, id))
+        #   COMMIT TO DB
+        mysql.connection.commit()
+        #   CLOSE CONNECTION
+        cur.close()
+
+        flash("Articles Updated", "success")
+        return redirect(url_for('dashboard'))
+
+    return render_template('edit_article.html', form=form)
+
+
+#    DELETE ARTICLE
+@app.route('/delete_article/<string:id>', methods=['POST'])
+@is_logged_in
+def delete_article(id):
+    #   CREATE CURSOR
+    cur = mysql.connection.cursor()
+    #   EXECUTE
+    cur.execute("DELETE FROM articles WHERE id = %s", [id])
+    #   COMMIT TO DB
+    mysql.connection.commit()
+    #   CLOSE CONNECTION
+    cur.close()
+
+    flash("Articles Deleted", "success")
+    return redirect(url_for('dashboard'))
+
+
 if __name__ == "__main__":
     app.secret_key = 'secret123'
     app.run(debug=True)
