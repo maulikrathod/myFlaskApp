@@ -2,8 +2,8 @@ from flask import Flask, render_template, flash, redirect, url_for, session, log
 from flask_mysqldb import MySQL
 from wtforms import Form, StringField, TextAreaField, PasswordField, validators
 from passlib.hash import sha256_crypt
-from data import articles
 from functools import wraps
+# from data import articles
 
 app = Flask(__name__)
 
@@ -17,31 +17,51 @@ app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
 mysql = MySQL(app)
 
 
-Articles = articles()
+# Articles = articles()
 
-
+#    HOME PAGE
 @app.route('/')
 def index():
     return render_template('home.html')
 
-
+#   ABOUT
 @app.route('/about')
 def about():
     return render_template('about.html')
 
-
+#   ARTICLES
 @app.route('/articles')
 def articles():
-    return render_template('articles.html', articles=Articles)
+        #   CREATE CURSOR
+        cur = mysql.connection.cursor()
+
+        #   GET ARTICLES FROM DB
+        results = cur.execute("SELECT * FROM articles")
+        articles = cur.fetchall()
+
+        if results > 0:
+            return render_template('articles.html', articles = articles)
+        else:
+            msg = "NO Articles Found"
+            return render_template('articles.html', msg = msg)
+
+        #   CLOSE CONNECTION
+        cur.close()
 
 
+#   PERTICULER ARTICLES
 @app.route('/article/<string:id>/')
 def article(id):
-    return render_template('article.html', id=id)
+    #   CREATE CURSOR
+    cur = mysql.connection.cursor()
 
-# Register Form Class
+    #   GET ARTICLES FROM DB
+    results = cur.execute("SELECT * FROM articles WHERE id = %s", [id])
+    article = cur.fetchone()
 
+    return render_template('article.html', article = article)
 
+#   Register Form Class
 class RegisterForm(Form):
     name = StringField('Name', [validators.Length(min=1, max=50)])
     username = StringField('Username', [validators.Length(min=4, max=25)])
@@ -52,7 +72,7 @@ class RegisterForm(Form):
     ])
     confirm = PasswordField('Confirm Password')
 
-
+#   REGISTER
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegisterForm(request.form)
@@ -81,7 +101,7 @@ def register():
     return render_template('register.html', form=form)
 
 
-# User Login
+#   LOGIN
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -117,7 +137,7 @@ def login():
     return render_template('login.html')
 
 
-# check if user logged_in
+#   CHECK IF LOGGED_IN
 def is_logged_in(f):
     @wraps(f)
     def wrap(*args, **kwargs):
@@ -128,19 +148,65 @@ def is_logged_in(f):
             return redirect(url_for("login"))
     return wrap
 
-
+#   LOGOUT
 @app.route('/logout')
+@is_logged_in
 def logout():
     session.clear()
     flash("You are now Loged Out", "success")
     return redirect(url_for("login"))
 
-
+#   DASHBOARD
 @app.route('/dashboard')
 @is_logged_in
 def dashboard():
-    return render_template('dashboard.html')
+    #   CREATE CURSOR
+    cur = mysql.connection.cursor()
 
+    #   GET ARTICLES FROM DB
+    results = cur.execute("SELECT * FROM articles")
+    articles = cur.fetchall()
+
+    if results > 0:
+        return render_template('dashboard.html', articles = articles)
+    else:
+        msg = "NO Articles Found"
+        return render_template('dashboard.html', msg = msg)
+
+    #   CLOSE CONNECTION
+    cur.close()
+
+#   ARTICLES Form Class
+class ArticleForm(Form):
+    title = StringField('Title', [validators.Length(min=1, max=200)])
+    body = TextAreaField('Body', [validators.Length(min=30)])
+
+
+#   ADD ARTICLE
+@app.route('/add_article', methods=['GET', 'POST'])
+@is_logged_in
+def add_article():
+    form = ArticleForm(request.form)
+    if request.method == 'POST' and form.validate():
+        title = form.title.data
+        body = form.body.data
+
+        #   CREATE CURSOR
+        cur = mysql.connection.cursor()
+
+        #   EXECUTE
+        cur.execute("INSERT INTO articles(title, body, author) VALUES(%s, %s, %s)",(title, body, session['username']))
+
+        #   COMMIT TO DB
+        mysql.connection.commit()
+
+        #   CLOSE CONNECTION
+        cur.close()
+
+        flash("Articles Created", "success")
+        return redirect(url_for('dashboard'))
+
+    return render_template('add_article.html', form=form)
 
 if __name__ == "__main__":
     app.secret_key = 'secret123'
